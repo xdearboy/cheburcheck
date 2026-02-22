@@ -31,7 +31,7 @@ COPY --from=build /build/website/static ./static
 COPY --from=build /build/website/templates ./templates
 
 ## ensure the container listens globally on port 8080
-ENV ROCKET_ADDRESS=0.0.0.0
+ENV ROCKET_ADDRESS=::
 ENV ROCKET_PORT=8080
 
 EXPOSE 8080

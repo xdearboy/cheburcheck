@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "REFRESH MATERIALIZED VIEW whitelist",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "ea9307414ca1375dea4b9ef49ddfb0d679bbd6971b2ca75d25fbaf6fdc04951d"
+}

@@ -2,7 +2,7 @@
     <input
             type="text"
             name="target"
-            placeholder="example.com или 1.1.1.1 или 2606:4700:4700::1001"
+            placeholder="example.com, 1.1.1.1, 1.0.0.0/24, 2606:4700::/32"
             class="search-input"
             minlength="3"
             required

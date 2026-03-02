@@ -1,4 +1,5 @@
 use crate::resolver::{ResolveError, Resolver};
+use ipnet::{Ipv4Net, Ipv6Net};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use url::Url;
 
@@ -7,10 +8,27 @@ pub enum Target {
     Domain(String),
     Ipv4(Ipv4Addr),
     Ipv6(Ipv6Addr),
+    Ipv4Subnet(Ipv4Net),
+    Ipv6Subnet(Ipv6Net),
 }
 
 impl From<&str> for Target {
     fn from(input: &str) -> Self {
+        if input.contains('/') {
+            if let Ok(ipv4_net) = input.parse::<Ipv4Net>() {
+                if ipv4_net.prefix_len() >= 8 {
+                    return Target::Ipv4Subnet(ipv4_net);
+                }
+            }
+            
+            if let Ok(ipv6_net) = input.parse::<Ipv6Net>() {
+                if ipv6_net.prefix_len() >= 32 {
+                    return Target::Ipv6Subnet(ipv6_net);
+                }
+            }
+            
+        }
+
         if let Ok(ipv4) = input.parse::<Ipv4Addr>() {
             return Target::Ipv4(ipv4);
         }
@@ -33,15 +51,60 @@ impl Target {
         match self {
             Target::Domain(_) => "Домен",
             Target::Ipv4(_) => "IPv4-адрес",
-            Target::Ipv6(_) => "IPv6-адрес"
+            Target::Ipv6(_) => "IPv6-адрес",
+            Target::Ipv4Subnet(_) => "IPv4-подсеть",
+            Target::Ipv6Subnet(_) => "IPv6-подсеть",
         }
     }
 
     pub async fn resolve(&self, resolver: &Resolver) -> Result<Vec<IpAddr>, ResolveError> {
         Ok(match self {
             Target::Domain(domain) => resolver.lookup_ips(domain).await?,
-            Target::Ipv4(ipv4) => vec![IpAddr::V4(ipv4.clone())],
-            Target::Ipv6(ipv6) => vec![IpAddr::V6(ipv6.clone())],
+            Target::Ipv4(ipv4) => vec![IpAddr::V4(*ipv4)],
+            Target::Ipv6(ipv6) => vec![IpAddr::V6(*ipv6)],
+            Target::Ipv4Subnet(net) => {
+                if net.prefix_len() >= 27 {
+                    net.hosts().map(IpAddr::V4).collect()
+                } else {
+                    let mut ips = Vec::with_capacity(256);
+                    ips.push(IpAddr::V4(net.network()));
+                    
+                    let base = u32::from(net.network());
+                    let max = (1u64 << (32 - net.prefix_len())) - 1;
+                    
+                    for i in 1..255 {
+                        let offset = ((max as f64 * i as f64) / 255.0) as u32;
+                        ips.push(IpAddr::V4(Ipv4Addr::from(base + offset)));
+                    }
+                    
+                    ips.push(IpAddr::V4(net.broadcast()));
+                    ips
+                }
+            },
+            Target::Ipv6Subnet(net) => {
+                if net.prefix_len() >= 124 {
+                    net.hosts().map(IpAddr::V6).collect()
+                } else {
+                    let mut ips = Vec::with_capacity(256);
+                    ips.push(IpAddr::V6(net.network()));
+                    
+                    let base = u128::from(net.network());
+                    let bits = 128 - net.prefix_len();
+                    let max = if bits >= 64 {
+                        u64::MAX as u128
+                    } else {
+                        (1u128 << bits) - 1
+                    };
+                    
+                    for i in 1..255 {
+                        let offset = ((max as f64 * i as f64) / 255.0) as u128;
+                        ips.push(IpAddr::V6(Ipv6Addr::from(base + offset)));
+                    }
+                    
+                    ips.push(IpAddr::V6(net.broadcast()));
+                    ips
+                }
+            },
         })
     }
 
@@ -50,6 +113,46 @@ impl Target {
             Target::Domain(domain) => domain.clone(),
             Target::Ipv4(v4) => v4.to_string(),
             Target::Ipv6(v6) => v6.to_string(),
+            Target::Ipv4Subnet(net) => net.to_string(),
+            Target::Ipv6Subnet(net) => net.to_string(),
         }
+    }
+
+    pub fn subnet_size(&self) -> Option<String> {
+        match self {
+            Target::Ipv4Subnet(net) => {
+                let size = 2u64.pow(32 - net.prefix_len() as u32);
+                Some(format_large_number(size as u128))
+            }
+            Target::Ipv6Subnet(net) => {
+                if net.prefix_len() == 128 {
+                    Some("1".to_string())
+                } else {
+                    let size = 2u128.pow(128 - net.prefix_len() as u32);
+                    Some(format_large_number(size))
+                }
+            }
+            _ => None,
+        }
+    }
+}
+
+fn format_large_number(n: u128) -> String {
+    if n < 1_000 {
+        n.to_string()
+    } else if n < 1_000_000 {
+        format!("{:.1}K", n as f64 / 1_000.0)
+    } else if n < 1_000_000_000 {
+        format!("{:.1}M", n as f64 / 1_000_000.0)
+    } else if n < 1_000_000_000_000 {
+        format!("{:.1}B", n as f64 / 1_000_000_000.0)
+    } else if n < 1_000_000_000_000_000 {
+        format!("{:.1}T", n as f64 / 1_000_000_000_000.0)
+    } else if n < 1_000_000_000_000_000_000 {
+        format!("{:.1}P", n as f64 / 1_000_000_000_000_000.0)
+    } else if n < 1_000_000_000_000_000_000_000 {
+        format!("{:.1}E", n as f64 / 1_000_000_000_000_000_000.0)
+    } else {
+        format!("{:.1}Z", n as f64 / 1_000_000_000_000_000_000_000.0)
     }
 }

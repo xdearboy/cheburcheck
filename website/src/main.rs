@@ -151,6 +151,7 @@ async fn check(
                 whitelist,
                 ips,
                 geo,
+                subnet_size: target.subnet_size(),
             },
         )),
         Ok(Check {
@@ -178,6 +179,7 @@ async fn check(
                 whitelist,
                 ips,
                 geo,
+                subnet_size: target.subnet_size(),
             },
         )),
         Err(e) => {

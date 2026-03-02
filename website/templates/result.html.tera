@@ -47,10 +47,39 @@
             <h3 class="section-title">Сетевые данные</h3>
             <div class="detail-row">
                 <span class="row-label">IP-адреса</span>
-                <div>
-                    {% for ip in ips %}
-                        <p class="row-value">{{ ip }}</p>
-                    {% endfor %}
+                <div class="ip-list-container">
+                    {% if ips | length == 1 %}
+                        <span class="ip-item">{{ ips | first }}</span>
+                        {% if subnet_size %}
+                            <span class="ip-count">({{ subnet_size }} всего)</span>
+                        {% endif %}
+                    {% elif ips | length <= 5 %}
+                        {% for ip in ips %}
+                            <span class="ip-item">{{ ip }}</span>
+                        {% endfor %}
+                        {% if subnet_size %}
+                            <span class="ip-count">({{ subnet_size }} всего)</span>
+                        {% endif %}
+                    {% else %}
+                        <div class="ip-summary">
+                            <span class="ip-range">{{ ips | first }} — {{ ips | last }}</span>
+                            {% if subnet_size %}
+                                <span class="ip-count">({{ subnet_size }} всего, показано {{ ips | length }})</span>
+                            {% else %}
+                                <span class="ip-count">({{ ips | length }} адресов)</span>
+                            {% endif %}
+                        </div>
+                        <details class="ip-list-details">
+                            <summary class="ip-list-toggle">
+                                Показать все
+                            </summary>
+                            <div class="ip-list-expanded">
+                                {% for ip in ips %}
+                                    <span class="ip-item">{{ ip }}</span>
+                                {% endfor %}
+                            </div>
+                        </details>
+                    {% endif %}
                 </div>
             </div>
             <div class="detail-row">

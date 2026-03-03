@@ -124,41 +124,40 @@ impl Checker {
             .filter_map(|ip| ru_blacklist.contains_ip(ip))
             .collect();
 
-        let asn_info = match &target {
-            Target::Asn(asn) => {
-                let prefixes = crate::asn::fetch_asn_prefixes_cached(
-                    *asn,
-                    |asn| self.resolver.asn_cache.get_cached_asn(asn),
-                    |asn, prefixes| self.resolver.asn_cache.cache_asn(asn, prefixes),
-                )
-                .await
-                .unwrap_or_default();
+        let asn_info = if let Target::Asn(asn) = &target {
+            let prefixes = crate::asn::fetch_asn_prefixes_cached(
+                *asn,
+                |asn| self.resolver.asn_cache.get_cached_asn(asn),
+                |asn, prefixes| self.resolver.asn_cache.cache_asn(asn, prefixes),
+            )
+            .await
+            .unwrap_or_default();
 
-                let mut blocked_prefixes: Vec<String> = prefixes
-                    .iter()
-                    .filter(|prefix| {
-                        if let Ok(ipnet) = prefix.parse::<IpNet>() {
-                            ru_blacklist.contains_ip(&ipnet.network()).is_some()
-                        } else {
-                            false
-                        }
-                    })
-                    .cloned()
-                    .collect();
-
-                for prefix in &prefixes {
+            let mut blocked_prefixes: Vec<String> = prefixes
+                .iter()
+                .filter(|prefix| {
                     if let Ok(ipnet) = prefix.parse::<IpNet>() {
-                        if cdn_list.contains(&ipnet.network()).is_some() {
-                            if !blocked_prefixes.contains(prefix) {
-                                blocked_prefixes.push(prefix.clone());
-                            }
+                        ru_blacklist.contains_ip(&ipnet.network()).is_some()
+                    } else {
+                        false
+                    }
+                })
+                .cloned()
+                .collect();
+
+            for prefix in &prefixes {
+                if let Ok(ipnet) = prefix.parse::<IpNet>() {
+                    if cdn_list.contains(&ipnet.network()).is_some() {
+                        if !blocked_prefixes.contains(prefix) {
+                            blocked_prefixes.push(prefix.clone());
                         }
                     }
                 }
-
-                Some(crate::asn::AsnInfo::new(*asn, prefixes, blocked_prefixes))
             }
-            _ => None,
+
+            Some(crate::asn::AsnInfo::new(*asn, prefixes, blocked_prefixes))
+        } else {
+            None
         };
 
         let asn_has_blocked = asn_info.as_ref()

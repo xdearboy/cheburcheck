@@ -20,6 +20,9 @@ pub mod lists;
 pub mod resolver;
 pub mod updater;
 pub mod target;
+pub mod subnet_sampler;
+
+pub use subnet_sampler::{sample_ipv4_subnet, sample_ipv6_subnet};
 
 pub struct Checker {
     rx: watch::Receiver<Option<DateTime<Utc>>>,
@@ -28,30 +31,9 @@ pub struct Checker {
     ru_blacklist: Arc<RwLock<RuBlacklist>>,
     geo_ip: Arc<RwLock<GeoIp>>,
     resolver: Resolver,
-    check_cache: Arc<RwLock<HashMap<String, CachedCheck>>>,
 }
 
-struct CachedCheck {
-    check: Check,
-    cached_at: std::time::SystemTime,
-}
-
-impl CachedCheck {
-    fn new(check: Check) -> Self {
-        Self {
-            check,
-            cached_at: std::time::SystemTime::now(),
-        }
-    }
-    
-    fn is_expired(&self) -> bool {
-        std::time::SystemTime::now()
-            .duration_since(self.cached_at)
-            .map(|d| d.as_secs() > 3600) 
-            .unwrap_or(true)
-    }
-}
-
+#[derive(Clone)]
 pub struct Check {
     pub verdict: CheckVerdict,
     pub geo: IpInfo,
@@ -60,26 +42,7 @@ pub struct Check {
     pub asn_info: Option<crate::asn::AsnInfo>,
 }
 
-impl Clone for Check {
-    fn clone(&self) -> Self {
-        Self {
-            verdict: match &self.verdict {
-                CheckVerdict::Clear => CheckVerdict::Clear,
-                CheckVerdict::Blocked { rkn_domain, cdn_provider_subnets } => {
-                    CheckVerdict::Blocked {
-                        rkn_domain: rkn_domain.clone(),
-                        cdn_provider_subnets: cdn_provider_subnets.clone(),
-                    }
-                }
-            },
-            geo: self.geo.clone(),
-            ips: self.ips.clone(),
-            rkn_subnets: self.rkn_subnets.clone(),
-            asn_info: self.asn_info.clone(),
-        }
-    }
-}
-
+#[derive(Clone)]
 pub enum CheckVerdict {
     Clear,
     Blocked {
@@ -111,7 +74,6 @@ impl Checker {
             ru_blacklist: Arc::new(RwLock::new(RuBlacklist::new())),
             geo_ip: Arc::new(RwLock::new(GeoIp::new())),
             resolver: Resolver::new().await,
-            check_cache: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -120,27 +82,6 @@ impl Checker {
     }
 
     pub async fn check(&self, target: Target) -> Result<Check, CheckError> {
-        let cache_key = target.to_query();
-        {
-            let cache = self.check_cache.read().await;
-            if let Some(cached) = cache.get(&cache_key) {
-                if !cached.is_expired() {
-                    return Ok(cached.check.clone());
-                }
-            }
-        }
-        
-        let result = self.check_impl(target.clone()).await;
-        
-        if let Ok(ref check) = result {
-            let mut cache = self.check_cache.write().await;
-            cache.insert(cache_key, CachedCheck::new(check.clone()));
-        }
-        
-        result
-    }
-
-    async fn check_impl(&self, target: Target) -> Result<Check, CheckError> {
         let ips = match target.resolve(&self.resolver).await {
             Ok(ips) => ips,
             Err(ResolveError::NxDomain) => {
@@ -187,8 +128,8 @@ impl Checker {
             Target::Asn(asn) => {
                 let prefixes = crate::asn::fetch_asn_prefixes_cached(
                     *asn,
-                    |asn| self.resolver.get_cached_asn(asn),
-                    |asn, prefixes| self.resolver.cache_asn(asn, prefixes),
+                    |asn| self.resolver.asn_cache.get_cached_asn(asn),
+                    |asn, prefixes| self.resolver.asn_cache.cache_asn(asn, prefixes),
                 )
                 .await
                 .unwrap_or_default();

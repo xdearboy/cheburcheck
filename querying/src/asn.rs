@@ -1,4 +1,6 @@
 use serde::Deserialize;
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
 
 #[derive(Deserialize)]
@@ -116,5 +118,35 @@ impl AsnInfo {
             .filter(|p| p.contains(':'))
             .map(|s| s.as_str())
             .collect()
+    }
+}
+
+
+pub struct AsnCache {
+    cache: Arc<RwLock<HashMap<u32, CachedAsnData>>>,
+}
+
+impl AsnCache {
+    pub fn new() -> Self {
+        Self {
+            cache: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    pub fn get_cached_asn(&self, asn: u32) -> Option<Vec<String>> {
+        let cache = self.cache.read().ok()?;
+        let cached_data = cache.get(&asn)?;
+
+        if cached_data.is_expired() {
+            None
+        } else {
+            Some(cached_data.prefixes.clone())
+        }
+    }
+
+    pub fn cache_asn(&self, asn: u32, prefixes: Vec<String>) {
+        if let Ok(mut cache) = self.cache.write() {
+            cache.insert(asn, CachedAsnData::new(prefixes));
+        }
     }
 }

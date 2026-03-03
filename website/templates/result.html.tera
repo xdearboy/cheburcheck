@@ -80,7 +80,7 @@
                         <div class="ip-summary">
                             <span class="ip-range">{{ ips | first }} — {{ ips | last }}</span>
                             {% if subnet_size %}
-                                <span class="ip-count">({{ subnet_size }} всего, показано {{ ips | length }})</span>
+                                <span class="ip-count">({{ subnet_size }} всего, проверено {{ ips | length }})</span>
                             {% else %}
                                 <span class="ip-count">({{ ips | length }} адресов)</span>
                             {% endif %}
@@ -117,76 +117,40 @@
                     {% endif %}
                 </span>
             </div>
-        </div>
-
-        {% if asn_info %}
-        <div class="detail-section">
-            <h3 class="section-title">Подсети ASN</h3>
             
-            {% set ipv4_prefixes = asn_info.prefixes | filter(attribute="contains", value=":") | length == 0 %}
-            {% set ipv4_list = [] %}
-            {% set ipv6_list = [] %}
-            {% for prefix in asn_info.prefixes %}
-                {% if ":" in prefix %}
-                    {% set_global ipv6_list = ipv6_list | concat(with=prefix) %}
-                {% else %}
-                    {% set_global ipv4_list = ipv4_list | concat(with=prefix) %}
-                {% endif %}
-            {% endfor %}
-            
-            {% if ipv4_list | length > 0 %}
+            {% if asn_info %}
             <div class="detail-row">
-                <span class="row-label">IPv4 подсети</span>
+                <span class="row-label">Подсети ASN</span>
                 <div class="prefix-list-container">
-                    {% if ipv4_list | length <= 10 %}
+                    {% set ipv4_list = [] %}
+                    {% set ipv6_list = [] %}
+                    {% for prefix in asn_info.prefixes %}
+                        {% if ":" in prefix %}
+                            {% set_global ipv6_list = ipv6_list | concat(with=prefix) %}
+                        {% else %}
+                            {% set_global ipv4_list = ipv4_list | concat(with=prefix) %}
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% set all_prefixes = ipv4_list | concat(with=ipv6_list) %}
+                    {% if all_prefixes | length <= 10 %}
                         <div>
-                            {% for prefix in ipv4_list %}
+                            {% for prefix in all_prefixes %}
                                 <p class="row-value">{{ prefix }}</p>
                             {% endfor %}
                         </div>
                     {% else %}
                         <div>
-                            {% for prefix in ipv4_list | slice(end=10) %}
+                            {% for prefix in all_prefixes | slice(end=10) %}
                                 <p class="row-value">{{ prefix }}</p>
                             {% endfor %}
                         </div>
                         <details class="prefix-list-details">
                             <summary class="prefix-list-toggle">
-                                Показать все ({{ ipv4_list | length }})
+                                Показать все ({{ all_prefixes | length }})
                             </summary>
                             <div class="prefix-list-expanded">
-                                {% for prefix in ipv4_list %}
-                                    <p class="row-value">{{ prefix }}</p>
-                                {% endfor %}
-                            </div>
-                        </details>
-                    {% endif %}
-                </div>
-            </div>
-            {% endif %}
-            
-            {% if ipv6_list | length > 0 %}
-            <div class="detail-row">
-                <span class="row-label">IPv6 подсети</span>
-                <div class="prefix-list-container">
-                    {% if ipv6_list | length <= 10 %}
-                        <div>
-                            {% for prefix in ipv6_list %}
-                                <p class="row-value">{{ prefix }}</p>
-                            {% endfor %}
-                        </div>
-                    {% else %}
-                        <div>
-                            {% for prefix in ipv6_list | slice(end=10) %}
-                                <p class="row-value">{{ prefix }}</p>
-                            {% endfor %}
-                        </div>
-                        <details class="prefix-list-details">
-                            <summary class="prefix-list-toggle">
-                                Показать все ({{ ipv6_list | length }})
-                            </summary>
-                            <div class="prefix-list-expanded">
-                                {% for prefix in ipv6_list %}
+                                {% for prefix in all_prefixes %}
                                     <p class="row-value">{{ prefix }}</p>
                                 {% endfor %}
                             </div>
@@ -196,7 +160,6 @@
             </div>
             {% endif %}
         </div>
-        {% endif %}
 
         <div class="detail-section">
             <h3 class="reason-header">Нахождение в списках</h3>

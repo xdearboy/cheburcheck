@@ -572,6 +572,7 @@ h1.error-code {
     flex-direction: column;
     gap: 0.5rem;
     width: 100%;
+    align-items: flex-end;
 }
 
 .ip-summary {
@@ -605,19 +606,22 @@ h1.error-code {
 
 .ip-list-details {
     margin: 0;
+    width: fit-content;
 }
 
 .ip-list-toggle {
     cursor: pointer;
     color: var(--text-muted);
-    font-size: 0.75rem;
-    padding: 0.5rem 0.75rem;
+    font-size: 0.7rem;
+    padding: 0.35rem 0.6rem;
     border: 1px solid var(--border-color);
     text-align: center;
     list-style: none;
     user-select: none;
     transition: all 0.2s;
     background-color: rgba(23, 23, 23, 0.5);
+    width: fit-content;
+    max-width: 150px;
 }
 
 .ip-list-toggle:hover {
@@ -691,26 +695,29 @@ h1.error-code {
     flex-direction: column;
     gap: 0.5rem;
     width: 100%;
+    align-items: flex-end;
 }
 
 .prefix-list-details,
 .blocked-prefix-list-details {
     margin: 0;
-    width: 100%;
+    width: fit-content;
 }
 
 .prefix-list-toggle,
 .blocked-prefix-list-toggle {
     cursor: pointer;
     color: var(--text-muted);
-    font-size: 0.75rem;
-    padding: 0.5rem 0.75rem;
+    font-size: 0.7rem;
+    padding: 0.35rem 0.6rem;
     border: 1px solid var(--border-color);
     text-align: center;
     list-style: none;
     user-select: none;
     transition: all 0.2s;
     background-color: rgba(23, 23, 23, 0.5);
+    width: fit-content;
+    max-width: 150px;
 }
 
 .prefix-list-toggle:hover,
@@ -730,24 +737,27 @@ h1.error-code {
     flex-direction: column;
     gap: 0.5rem;
     width: 100%;
+    align-items: flex-end;
 }
 
 .cdn-networks-details {
     margin: 0;
-    width: 100%;
+    width: fit-content;
 }
 
 .cdn-networks-toggle {
     cursor: pointer;
     color: var(--text-muted);
-    font-size: 0.75rem;
-    padding: 0.5rem 0.75rem;
+    font-size: 0.7rem;
+    padding: 0.35rem 0.6rem;
     border: 1px solid var(--border-color);
     text-align: center;
     list-style: none;
     user-select: none;
     transition: all 0.2s;
     background-color: rgba(23, 23, 23, 0.5);
+    width: fit-content;
+    max-width: 150px;
 }
 
 .cdn-networks-toggle:hover {

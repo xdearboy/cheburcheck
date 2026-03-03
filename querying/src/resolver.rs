@@ -1,16 +1,15 @@
 use hickory_resolver::config::{LookupIpStrategy, ResolverConfig, ResolverOpts};
 use hickory_resolver::name_server::TokioConnectionProvider;
-use std::collections::HashMap;
 use std::io::{Error, ErrorKind};
 use std::net::IpAddr;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use thiserror::Error;
 
-use crate::asn::{AsnError, CachedAsnData};
+use crate::asn::{AsnCache, AsnError};
 
 pub struct Resolver {
     resolver: hickory_resolver::Resolver<TokioConnectionProvider>,
-    asn_cache: Arc<RwLock<HashMap<u32, CachedAsnData>>>,
+    pub asn_cache: Arc<AsnCache>,
 }
 
 #[derive(Error, Debug)]
@@ -49,7 +48,7 @@ impl Resolver {
             .build();
         Resolver { 
             resolver,
-            asn_cache: Arc::new(RwLock::new(HashMap::new())),
+            asn_cache: Arc::new(AsnCache::new()),
         }
     }
 
@@ -61,22 +60,5 @@ impl Resolver {
                 ResolveError::Other(Error::new(ErrorKind::Other, e))
             })?
             .into_iter().collect())
-    }
-
-    pub fn get_cached_asn(&self, asn: u32) -> Option<Vec<String>> {
-        let cache = self.asn_cache.read().ok()?;
-        let cached_data = cache.get(&asn)?;
-        
-        if cached_data.is_expired() {
-            None
-        } else {
-            Some(cached_data.prefixes.clone())
-        }
-    }
-
-    pub fn cache_asn(&self, asn: u32, prefixes: Vec<String>) {
-        if let Ok(mut cache) = self.asn_cache.write() {
-            cache.insert(asn, CachedAsnData::new(prefixes));
-        }
     }
 }

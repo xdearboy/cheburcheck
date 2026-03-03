@@ -133,6 +133,14 @@ impl Checker {
             .await
             .unwrap_or_default();
 
+            let country_code = if let Some(cached) = self.resolver.asn_cache.get_cached_country(*asn) {
+                cached
+            } else {
+                let country = crate::asn::fetch_asn_country(*asn).await.ok().flatten();
+                self.resolver.asn_cache.cache_country(*asn, country.clone());
+                country
+            };
+
             let mut blocked_prefixes: Vec<String> = prefixes
                 .iter()
                 .filter(|prefix| {
@@ -155,7 +163,7 @@ impl Checker {
                 }
             }
 
-            Some(crate::asn::AsnInfo::new(*asn, prefixes, blocked_prefixes))
+            Some(crate::asn::AsnInfo::new(*asn, prefixes, blocked_prefixes, country_code))
         } else {
             None
         };

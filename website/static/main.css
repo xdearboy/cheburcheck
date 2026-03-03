@@ -770,16 +770,9 @@ h1.error-code {
     display: none;
 }
 
-.cdn-networks-expanded {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    margin-top: 0.5rem;
-}
-
-
 .prefix-list-expanded,
-.blocked-prefix-list-expanded {
+.blocked-prefix-list-expanded,
+.cdn-networks-expanded {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;

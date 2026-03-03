@@ -40,6 +40,16 @@ pub async fn save_query(
             (vec![], vec![], None)
         };
 
+    let (resolved_ips, cdn_networks) = match target {
+        Target::Asn(_) => (vec![], vec![]),
+        _ => (check
+                  .ips
+                  .iter()
+                  .map(|i| i.to_string())
+                  .collect::<Vec<String>>(),
+              cdn_networks)
+    };
+
     let id = sqlx::query_scalar(
         "INSERT INTO queries (
                      query,
@@ -69,13 +79,7 @@ pub async fn save_query(
     .bind(check.geo.country_code.clone())
     .bind(check.geo.asn.clone())
     .bind(check.geo.organisation.clone())
-    .bind(
-        check
-            .ips
-            .iter()
-            .map(|i| i.to_string())
-            .collect::<Vec<String>>(),
-    )
+    .bind(resolved_ips)
     .bind(cdn_networks)
     .bind(cdn_providers)
     .bind(rkn_domain)

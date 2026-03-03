@@ -14,6 +14,7 @@ use maxminddb::MaxMindDbError;
 use thiserror::Error;
 use tokio::sync::{watch, RwLock};
 
+pub mod asn;
 pub mod geoip;
 pub mod lists;
 pub mod resolver;
@@ -27,6 +28,28 @@ pub struct Checker {
     ru_blacklist: Arc<RwLock<RuBlacklist>>,
     geo_ip: Arc<RwLock<GeoIp>>,
     resolver: Resolver,
+    check_cache: Arc<RwLock<HashMap<String, CachedCheck>>>,
+}
+
+struct CachedCheck {
+    check: Check,
+    cached_at: std::time::SystemTime,
+}
+
+impl CachedCheck {
+    fn new(check: Check) -> Self {
+        Self {
+            check,
+            cached_at: std::time::SystemTime::now(),
+        }
+    }
+    
+    fn is_expired(&self) -> bool {
+        std::time::SystemTime::now()
+            .duration_since(self.cached_at)
+            .map(|d| d.as_secs() > 3600) 
+            .unwrap_or(true)
+    }
 }
 
 pub struct Check {
@@ -34,6 +57,27 @@ pub struct Check {
     pub geo: IpInfo,
     pub ips: Vec<IpAddr>,
     pub rkn_subnets: HashSet<IpNet>,
+    pub asn_info: Option<crate::asn::AsnInfo>,
+}
+
+impl Clone for Check {
+    fn clone(&self) -> Self {
+        Self {
+            verdict: match &self.verdict {
+                CheckVerdict::Clear => CheckVerdict::Clear,
+                CheckVerdict::Blocked { rkn_domain, cdn_provider_subnets } => {
+                    CheckVerdict::Blocked {
+                        rkn_domain: rkn_domain.clone(),
+                        cdn_provider_subnets: cdn_provider_subnets.clone(),
+                    }
+                }
+            },
+            geo: self.geo.clone(),
+            ips: self.ips.clone(),
+            rkn_subnets: self.rkn_subnets.clone(),
+            asn_info: self.asn_info.clone(),
+        }
+    }
 }
 
 pub enum CheckVerdict {
@@ -67,6 +111,7 @@ impl Checker {
             ru_blacklist: Arc::new(RwLock::new(RuBlacklist::new())),
             geo_ip: Arc::new(RwLock::new(GeoIp::new())),
             resolver: Resolver::new().await,
+            check_cache: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -75,6 +120,27 @@ impl Checker {
     }
 
     pub async fn check(&self, target: Target) -> Result<Check, CheckError> {
+        let cache_key = target.to_query();
+        {
+            let cache = self.check_cache.read().await;
+            if let Some(cached) = cache.get(&cache_key) {
+                if !cached.is_expired() {
+                    return Ok(cached.check.clone());
+                }
+            }
+        }
+        
+        let result = self.check_impl(target.clone()).await;
+        
+        if let Ok(ref check) = result {
+            let mut cache = self.check_cache.write().await;
+            cache.insert(cache_key, CachedCheck::new(check.clone()));
+        }
+        
+        result
+    }
+
+    async fn check_impl(&self, target: Target) -> Result<Check, CheckError> {
         let ips = match target.resolve(&self.resolver).await {
             Ok(ips) => ips,
             Err(ResolveError::NxDomain) => {
@@ -117,17 +183,61 @@ impl Checker {
             .filter_map(|ip| ru_blacklist.contains_ip(ip))
             .collect();
 
+        let asn_info = match &target {
+            Target::Asn(asn) => {
+                let prefixes = crate::asn::fetch_asn_prefixes_cached(
+                    *asn,
+                    |asn| self.resolver.get_cached_asn(asn),
+                    |asn, prefixes| self.resolver.cache_asn(asn, prefixes),
+                )
+                .await
+                .unwrap_or_default();
+
+                let mut blocked_prefixes: Vec<String> = prefixes
+                    .iter()
+                    .filter(|prefix| {
+                        if let Ok(ipnet) = prefix.parse::<IpNet>() {
+                            ru_blacklist.contains_ip(&ipnet.network()).is_some()
+                        } else {
+                            false
+                        }
+                    })
+                    .cloned()
+                    .collect();
+
+                for prefix in &prefixes {
+                    if let Ok(ipnet) = prefix.parse::<IpNet>() {
+                        if cdn_list.contains(&ipnet.network()).is_some() {
+                            if !blocked_prefixes.contains(prefix) {
+                                blocked_prefixes.push(prefix.clone());
+                            }
+                        }
+                    }
+                }
+
+                Some(crate::asn::AsnInfo::new(*asn, prefixes, blocked_prefixes))
+            }
+            _ => None,
+        };
+
+        let asn_has_blocked = asn_info.as_ref()
+            .map(|info| !info.blocked_prefixes.is_empty())
+            .unwrap_or(false);
+
+        let has_blocked_subnets = !rkn_subnets.is_empty();
+
         Ok(Check {
-            verdict: match (domain, cdn_provider_subnets.is_empty()) {
-                (None, true) => CheckVerdict::Clear,
-                (domain, _) => CheckVerdict::Blocked {
+            verdict: match (domain, cdn_provider_subnets.is_empty(), asn_has_blocked, has_blocked_subnets) {
+                (None, true, false, false) => CheckVerdict::Clear,
+                (domain, _, _, _) => CheckVerdict::Blocked {
                     rkn_domain: domain,
                     cdn_provider_subnets,
                 },
             },
             rkn_subnets,
             geo,
-            ips
+            ips,
+            asn_info,
         })
     }
 

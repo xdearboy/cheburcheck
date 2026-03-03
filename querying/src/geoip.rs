@@ -13,7 +13,7 @@ pub struct GeoIp {
     country: Option<maxminddb::Reader<Vec<u8>>>,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 pub struct IpInfo {
     pub asn: Option<String>,
     pub country_code: Option<String>,

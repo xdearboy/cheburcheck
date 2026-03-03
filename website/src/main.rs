@@ -101,7 +101,7 @@ async fn check(
     addr: &ClientRealAddr,
     mut db: Connection<Db>,
 ) -> Result<Template, Status> {
-    let target = Target::from(target);
+    let target = Target::from(target.trim());
     let check = checker.read().await.check(target.clone()).await;
     let id = if let Ok(check) = &check {
         match save_query(&mut db, &target, check, addr, checker.read().await).await {
@@ -137,6 +137,7 @@ async fn check(
             geo,
             ips,
             rkn_subnets,
+            asn_info,
         }) => Ok(Template::render(
             "result",
             context! {
@@ -152,6 +153,7 @@ async fn check(
                 ips,
                 geo,
                 subnet_size: target.subnet_size(),
+                asn_info,
             },
         )),
         Ok(Check {
@@ -163,6 +165,7 @@ async fn check(
             geo,
             rkn_subnets,
             ips,
+            asn_info,
         }) => Ok(Template::render(
             "result",
             context! {
@@ -180,6 +183,7 @@ async fn check(
                 ips,
                 geo,
                 subnet_size: target.subnet_size(),
+                asn_info,
             },
         )),
         Err(e) => {
@@ -265,7 +269,9 @@ async fn run_migrations(rocket: Rocket<Build>) -> fairing::Result {
 #[launch]
 async fn rocket() -> _ {
     env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
+        .filter_level(log::LevelFilter::Warn)
+        .filter_module("website", log::LevelFilter::Info)
+        .filter_module("querying", log::LevelFilter::Info)
         .init();
 
     let mut interval = time::interval(Duration::from_secs(

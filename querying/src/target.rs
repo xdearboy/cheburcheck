@@ -1,3 +1,4 @@
+use crate::asn::fetch_asn_prefixes_cached;
 use crate::resolver::{ResolveError, Resolver};
 use ipnet::{Ipv4Net, Ipv6Net};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
@@ -10,10 +11,20 @@ pub enum Target {
     Ipv6(Ipv6Addr),
     Ipv4Subnet(Ipv4Net),
     Ipv6Subnet(Ipv6Net),
+    Asn(u32),
 }
+
 
 impl From<&str> for Target {
     fn from(input: &str) -> Self {
+        if input.len() > 2 && input[..2].eq_ignore_ascii_case("as") {
+            if let Ok(asn) = input[2..].parse::<u32>() {
+                if asn >= 1 {
+                    return Target::Asn(asn);
+                }
+            }
+        }
+
         if input.contains('/') {
             if let Ok(ipv4_net) = input.parse::<Ipv4Net>() {
                 if ipv4_net.prefix_len() >= 8 {
@@ -54,6 +65,7 @@ impl Target {
             Target::Ipv6(_) => "IPv6-адрес",
             Target::Ipv4Subnet(_) => "IPv4-подсеть",
             Target::Ipv6Subnet(_) => "IPv6-подсеть",
+            Target::Asn(_) => "Автономная система",
         }
     }
 
@@ -105,6 +117,55 @@ impl Target {
                     ips
                 }
             },
+            Target::Asn(asn) => {
+                let prefixes = fetch_asn_prefixes_cached(
+                    *asn,
+                    |asn| resolver.get_cached_asn(asn),
+                    |asn, prefixes| resolver.cache_asn(asn, prefixes),
+                )
+                .await?;
+                
+                if prefixes.is_empty() {
+                    return Ok(vec![]);
+                }
+                
+                let mut all_ips = Vec::new();
+                
+                for prefix in &prefixes {
+                    if let Ok(ipv4_net) = prefix.parse::<Ipv4Net>() {
+                        all_ips.push(IpAddr::V4(ipv4_net.network()));
+                        
+                        let base = u32::from(ipv4_net.network());
+                        let max = (1u64 << (32 - ipv4_net.prefix_len())) - 1;
+                        
+                        for i in 1..10 {
+                            let offset = ((max as f64 * i as f64) / 10.0) as u32;
+                            all_ips.push(IpAddr::V4(Ipv4Addr::from(base + offset)));
+                        }
+                        
+                        all_ips.push(IpAddr::V4(ipv4_net.broadcast()));
+                    } else if let Ok(ipv6_net) = prefix.parse::<Ipv6Net>() {
+                        all_ips.push(IpAddr::V6(ipv6_net.network()));
+                        
+                        let base = u128::from(ipv6_net.network());
+                        let bits = 128 - ipv6_net.prefix_len();
+                        let max = if bits >= 64 {
+                            u64::MAX as u128
+                        } else {
+                            (1u128 << bits) - 1
+                        };
+                        
+                        for i in 1..10 {
+                            let offset = ((max as f64 * i as f64) / 10.0) as u128;
+                            all_ips.push(IpAddr::V6(Ipv6Addr::from(base + offset)));
+                        }
+                        
+                        all_ips.push(IpAddr::V6(ipv6_net.broadcast()));
+                    } 
+                }
+                
+                all_ips
+            },
         })
     }
 
@@ -115,6 +176,7 @@ impl Target {
             Target::Ipv6(v6) => v6.to_string(),
             Target::Ipv4Subnet(net) => net.to_string(),
             Target::Ipv6Subnet(net) => net.to_string(),
+            Target::Asn(asn) => format!("AS{}", asn),
         }
     }
 

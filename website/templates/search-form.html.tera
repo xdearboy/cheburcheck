@@ -2,7 +2,7 @@
     <input
             type="text"
             name="target"
-            placeholder="example.com, 1.1.1.1, 1.0.0.0/24, 2606:4700::/32"
+            placeholder="example.com, 1.1.1.1, 1.0.0.0/24, AS13335"
             class="search-input"
             minlength="3"
             required
